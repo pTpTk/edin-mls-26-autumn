@@ -16,7 +16,7 @@
 #include "asr_kernels.h"
 #include "common.cuh"
 
-constexpr int TILE = 16;  // try 8 or 32 (32 x 32 = 1024 threads, the maximum per block)
+constexpr int TILE = 32;  // try 8 or 32 (32 x 32 = 1024 threads, the maximum per block)
 
 __global__ void linear_tiled_kernel(const float* x, const float* w, const float* bias,
                                     float* y, int M, int N, int K, int act) {
@@ -32,26 +32,40 @@ __global__ void linear_tiled_kernel(const float* x, const float* w, const float*
   for (int k0 = 0; k0 < K; k0 += TILE) {
     // ======================== BLANK 3.1 =========================
     // Load this thread's element of the x tile into xs. Use 0 outside x.
-    // YOUR CODE HERE
+    int col_x = k0 + tx;
+    int x_index = row * K + col_x;
+    bool valid_x = row < M && col_x < K;
+    xs[ty][tx] = (valid_x) ? x[x_index] : 0;
     // ============================================================
 
     // ======================== BLANK 3.2 =========================
     // Load this thread's element of the w tile, so that ws[n][k] holds
     // w[blockIdx.x * TILE + n][k0 + k]. Use 0 outside w. Threads with consecutive
     // tx must read consecutive addresses of w.
-    // YOUR CODE HERE
+    int row_w = k0 + ty;
+    int w_index = col * K + row_w;
+    bool valid_w = col < N && row_w < K;
+    ws[tx][ty] = (valid_w) ? w[w_index] : 0;
+    // ws[ty][tx] = (valid_w) ? w[w_index] : 0;
     // ============================================================
 
     // ======================== BLANK 3.3 =========================
     // Add this K step's contribution to acc.
-    // YOUR CODE HERE
+    __syncthreads();
+    for(int q = 0; q < TILE; ++q){
+      acc += xs[ty][q] * ws[tx][q];
+      // acc += xs[ty][q] * ws[q][tx];
+    }
+    __syncthreads();
     // ============================================================
   }
 
   // ======================== BLANK 3.4 =========================
   // Epilogue: for outputs inside y, add bias[col] (bias may be nullptr), apply
   // gelu() when act == ACT_GELU, and store.
-  // YOUR CODE HERE
+  if(bias) acc += bias[col];
+  if(act == ACT_GELU) acc = gelu(acc);
+  if(row < M && col < N) y[row * N + col] = acc;
   // ============================================================
 }
 

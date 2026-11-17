@@ -3,10 +3,8 @@ __pycache__/
 .env
 .env.*
 !.env.example
-.cache/
 .venv/
 venv/
-results/
 *.log
 .pytest_cache/
 *.aux
